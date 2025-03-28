@@ -198,6 +198,15 @@ void net__init_tls(void)
 }
 #endif
 
+bool net__is_connected(struct mosquitto *mosq)
+{
+#if defined(WITH_BROKER) && defined(WITH_WEBSOCKETS)
+	return mosq->sock != INVALID_SOCKET || mosq->wsi != NULL;
+#else
+	return mosq->sock != INVALID_SOCKET;
+#endif
+}
+
 /* Close a socket associated with a context and set it to -1.
  * Returns 1 on failure (context is NULL)
  * Returns 0 on success.
@@ -550,7 +559,6 @@ void net__print_ssl_error(struct mosquitto *mosq)
 
 int net__socket_connect_tls(struct mosquitto *mosq)
 {
-	int ret, err;
 	long res;
 
 	ERR_clear_error();
@@ -976,6 +984,7 @@ ssize_t net__read(struct mosquitto *mosq, void *buf, size_t count)
 	errno = 0;
 #ifdef WITH_TLS
 	if(mosq->ssl){
+		ERR_clear_error();
 		ret = SSL_read(mosq->ssl, buf, (int)count);
 		if(ret <= 0){
 			ret = net__handle_ssl(mosq, ret);
@@ -1007,6 +1016,7 @@ ssize_t net__write(struct mosquitto *mosq, const void *buf, size_t count)
 	errno = 0;
 #ifdef WITH_TLS
 	if(mosq->ssl){
+		ERR_clear_error();
 		mosq->want_write = false;
 		ret = SSL_write(mosq->ssl, buf, (int)count);
 		if(ret < 0){

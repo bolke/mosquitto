@@ -120,6 +120,10 @@ WITH_JEMALLOC:=no
 # probably of no particular interest to end users.
 WITH_XTREPORT=no
 
+# Use the old O(n) keepalive check routine, instead of the new O(1) keepalive
+# check routine. See src/keepalive.c for notes on this.
+WITH_OLD_KEEPALIVE=no
+
 # Build using clang and with address sanitiser enabled
 WITH_ASAN=no
 
@@ -130,7 +134,7 @@ WITH_ASAN=no
 
 # Also bump lib/mosquitto.h, CMakeLists.txt,
 # installer/mosquitto.nsi, installer/mosquitto64.nsi
-VERSION=2.0.18
+VERSION=2.0.21
 
 # Client library SO version. Bump if incompatible API/ABI changes are made.
 SOVERSION=1
@@ -246,11 +250,11 @@ ifeq ($(WITH_WRAP),yes)
 endif
 
 ifeq ($(WITH_TLS),yes)
-	APP_CPPFLAGS:=$(APP_CPPFLAGS) -DWITH_TLS
-	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS
+	APP_CPPFLAGS:=$(APP_CPPFLAGS) -DWITH_TLS -DOPENSSL_API_COMPAT=0x10100000L
+	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS -DOPENSSL_API_COMPAT=0x10100000L
 	BROKER_LDADD:=$(BROKER_LDADD) -lssl -lcrypto
-	CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS
-	LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS
+	CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS -DOPENSSL_API_COMPAT=0x10100000L
+	LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS -DOPENSSL_API_COMPAT=0x10100000L
 	LIB_LIBADD:=$(LIB_LIBADD) -lssl -lcrypto
 	PASSWD_LDADD:=$(PASSWD_LDADD) -lcrypto
 	STATIC_LIB_DEPS:=$(STATIC_LIB_DEPS) -lssl -lcrypto
@@ -386,6 +390,10 @@ endif
 
 ifeq ($(WITH_XTREPORT),yes)
 	BROKER_CFLAGS:=$(BROKER_CFLAGS) -DWITH_XTREPORT
+endif
+
+ifeq ($(WITH_OLD_KEEPALIVE),yes)
+	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_OLD_KEEPALIVE
 endif
 
 BROKER_LDADD:=${BROKER_LDADD} ${LDADD}

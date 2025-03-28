@@ -38,6 +38,7 @@ Contributors:
 #include "mqtt_protocol.h"
 #include "net_mosq.h"
 #include "packet_mosq.h"
+#include "time_mosq.h"
 #include "will_mosq.h"
 
 static unsigned int init_refcount = 0;
@@ -57,15 +58,15 @@ int mosquitto_lib_init(void)
 	int rc;
 
 	if (init_refcount == 0) {
+		mosquitto_time_init();
 #ifdef WIN32
 		srand((unsigned int)GetTickCount64());
 #elif _POSIX_TIMERS>0 && defined(_POSIX_MONOTONIC_CLOCK)
 		struct timespec tp;
 #ifdef CLOCK_BOOTTIME
-		clock_gettime(CLOCK_BOOTTIME, &tp);
-#else
-		clock_gettime(CLOCK_MONOTONIC, &tp);
+		if (clock_gettime(CLOCK_BOOTTIME, &tp) != 0)
 #endif
+		clock_gettime(CLOCK_MONOTONIC, &tp);
 		srand((unsigned int)tp.tv_nsec);
 #elif defined(__APPLE__)
 		uint64_t ticks;
@@ -202,24 +203,27 @@ int mosquitto_reinitialise(struct mosquitto *mosq, const char *id, bool clean_st
 	mosq->ssl = NULL;
 	mosq->ssl_ctx = NULL;
 	mosq->ssl_ctx_defaults = true;
+#ifndef WITH_BROKER
+	mosq->user_ssl_ctx = NULL;
+#endif
 	mosq->tls_cert_reqs = SSL_VERIFY_PEER;
 	mosq->tls_insecure = false;
 	mosq->want_write = false;
 	mosq->tls_ocsp_required = false;
 #endif
 #ifdef WITH_THREADING
-	pthread_mutex_init(&mosq->callback_mutex, NULL);
-	pthread_mutex_init(&mosq->log_callback_mutex, NULL);
-	pthread_mutex_init(&mosq->state_mutex, NULL);
-	pthread_mutex_init(&mosq->out_packet_mutex, NULL);
-	pthread_mutex_init(&mosq->current_out_packet_mutex, NULL);
-	pthread_mutex_init(&mosq->msgtime_mutex, NULL);
-	pthread_mutex_init(&mosq->msgs_in.mutex, NULL);
-	pthread_mutex_init(&mosq->msgs_out.mutex, NULL);
-	pthread_mutex_init(&mosq->mid_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->callback_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->log_callback_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->state_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->out_packet_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->current_out_packet_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->msgtime_mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->msgs_in.mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->msgs_out.mutex, NULL);
+	COMPAT_pthread_mutex_init(&mosq->mid_mutex, NULL);
 	mosq->thread_id = pthread_self();
 #endif
-	/* This must be after pthread_mutex_init(), otherwise the log mutex may be
+	/* This must be after COMPAT_pthread_mutex_init(), otherwise the log mutex may be
 	 * used before being initialised. */
 	if(net__socketpair(&mosq->sockpairR, &mosq->sockpairW)){
 		log__printf(mosq, MOSQ_LOG_WARNING,
@@ -237,8 +241,8 @@ void mosquitto__destroy(struct mosquitto *mosq)
 #ifdef WITH_THREADING
 #  ifdef HAVE_PTHREAD_CANCEL
 	if(mosq->threaded == mosq_ts_self && !pthread_equal(mosq->thread_id, pthread_self())){
-		pthread_cancel(mosq->thread_id);
-		pthread_join(mosq->thread_id, NULL);
+		COMPAT_pthread_cancel(mosq->thread_id);
+		COMPAT_pthread_join(mosq->thread_id, NULL);
 		mosq->threaded = mosq_ts_none;
 	}
 #  endif
@@ -247,15 +251,15 @@ void mosquitto__destroy(struct mosquitto *mosq)
 		/* If mosq->id is not NULL then the client has already been initialised
 		 * and so the mutexes need destroying. If mosq->id is NULL, the mutexes
 		 * haven't been initialised. */
-		pthread_mutex_destroy(&mosq->callback_mutex);
-		pthread_mutex_destroy(&mosq->log_callback_mutex);
-		pthread_mutex_destroy(&mosq->state_mutex);
-		pthread_mutex_destroy(&mosq->out_packet_mutex);
-		pthread_mutex_destroy(&mosq->current_out_packet_mutex);
-		pthread_mutex_destroy(&mosq->msgtime_mutex);
-		pthread_mutex_destroy(&mosq->msgs_in.mutex);
-		pthread_mutex_destroy(&mosq->msgs_out.mutex);
-		pthread_mutex_destroy(&mosq->mid_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->callback_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->log_callback_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->state_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->out_packet_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->current_out_packet_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->msgtime_mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->msgs_in.mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->msgs_out.mutex);
+		COMPAT_pthread_mutex_destroy(&mosq->mid_mutex);
 	}
 #endif
 	if(mosq->sock != INVALID_SOCKET){
@@ -267,9 +271,17 @@ void mosquitto__destroy(struct mosquitto *mosq)
 	if(mosq->ssl){
 		SSL_free(mosq->ssl);
 	}
-	if(mosq->ssl_ctx){
-		SSL_CTX_free(mosq->ssl_ctx);
-	}
+#ifndef WITH_BROKER
+	if(mosq->user_ssl_ctx){
+		SSL_CTX_free(mosq->user_ssl_ctx);
+	}else if(mosq->ssl_ctx){
+ 		SSL_CTX_free(mosq->ssl_ctx);
+ 	}
+#else
+ 	if(mosq->ssl_ctx){
+ 		SSL_CTX_free(mosq->ssl_ctx);
+ 	}
+#endif
 	mosquitto__free(mosq->tls_cafile);
 	mosquitto__free(mosq->tls_capath);
 	mosquitto__free(mosq->tls_certfile);
@@ -280,6 +292,10 @@ void mosquitto__destroy(struct mosquitto *mosq)
 	mosquitto__free(mosq->tls_psk);
 	mosquitto__free(mosq->tls_psk_identity);
 	mosquitto__free(mosq->tls_alpn);
+#ifndef OPENSSL_NO_ENGINE
+	mosquitto__free(mosq->tls_engine);
+	mosq->tls_engine = NULL;
+#endif
 #endif
 
 	mosquitto__free(mosq->address);

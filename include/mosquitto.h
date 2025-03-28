@@ -66,7 +66,7 @@ extern "C" {
 
 #define LIBMOSQUITTO_MAJOR 2
 #define LIBMOSQUITTO_MINOR 0
-#define LIBMOSQUITTO_REVISION 18
+#define LIBMOSQUITTO_REVISION 21
 /* LIBMOSQUITTO_VERSION_NUMBER looks like 1002001 for e.g. version 1.2.1. */
 #define LIBMOSQUITTO_VERSION_NUMBER (LIBMOSQUITTO_MAJOR*1000000+LIBMOSQUITTO_MINOR*1000+LIBMOSQUITTO_REVISION)
 
@@ -399,8 +399,7 @@ libmosq_EXPORT int mosquitto_will_set(struct mosquitto *mosq, const char *topic,
  * before calling <mosquitto_connect>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the Will. For MQTT v3.1.1 and below, the `properties`
- * argument will be ignored.
+ * will be applied to the Will.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -431,6 +430,8 @@ libmosq_EXPORT int mosquitto_will_set(struct mosquitto *mosq, const char *topic,
  * 	                          using MQTT v5
  * 	MOSQ_ERR_PROTOCOL -       if a property is invalid for use with wills.
  *	MOSQ_ERR_DUPLICATE_PROPERTY - if a property is duplicated where it is forbidden.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  */
 libmosq_EXPORT int mosquitto_will_set_v5(struct mosquitto *mosq, const char *topic, int payloadlen, const void *payload, int qos, bool retain, mosquitto_property *properties);
 
@@ -507,7 +508,7 @@ libmosq_EXPORT int mosquitto_username_pw_set(struct mosquitto *mosq, const char 
  * 	                   * mosq == NULL
  * 	                   * host == NULL
  * 	                   * port < 0
- * 	                   * keepalive < 5
+ * 	                   * keepalive < 5 (keepalive == 0 is allowed, for an infinite keepalive)
  * 	MOSQ_ERR_ERRNO -   if a system call returned an error. The variable errno
  *                     contains the error code, even on Windows.
  *                     Use strerror_r() where available or FormatMessage() on
@@ -562,8 +563,7 @@ libmosq_EXPORT int mosquitto_connect_bind(struct mosquitto *mosq, const char *ho
  * <mosquitto_property_free_all>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the CONNECT message. For MQTT v3.1.1 and below, the
- * `properties` argument will be ignored.
+ * will be applied to the CONNECT message.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -587,13 +587,15 @@ libmosq_EXPORT int mosquitto_connect_bind(struct mosquitto *mosq, const char *ho
  * 	                   * mosq == NULL
  * 	                   * host == NULL
  * 	                   * port < 0
- * 	                   * keepalive < 5
+ * 	                   * keepalive < 5 (keepalive == 0 is allowed, for an infinite keepalive)
  * 	MOSQ_ERR_ERRNO -   if a system call returned an error. The variable errno
  *                     contains the error code, even on Windows.
  *                     Use strerror_r() where available or FormatMessage() on
  *                     Windows.
  *	MOSQ_ERR_DUPLICATE_PROPERTY - if a property is duplicated where it is forbidden.
  *	MOSQ_ERR_PROTOCOL - if any property is invalid for use with CONNECT.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  *
  * See Also:
  * 	<mosquitto_connect>, <mosquitto_connect_async>, <mosquitto_connect_bind_async>
@@ -795,8 +797,7 @@ libmosq_EXPORT int mosquitto_disconnect(struct mosquitto *mosq);
  * <mosquitto_property_free_all>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the DISCONNECT message. For MQTT v3.1.1 and below, the
- * `properties` argument will be ignored.
+ * will be applied to the DISCONNECT message.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -813,6 +814,8 @@ libmosq_EXPORT int mosquitto_disconnect(struct mosquitto *mosq);
  * 	MOSQ_ERR_NO_CONN -  if the client isn't connected to a broker.
  *	MOSQ_ERR_DUPLICATE_PROPERTY - if a property is duplicated where it is forbidden.
  *	MOSQ_ERR_PROTOCOL - if any property is invalid for use with DISCONNECT.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  */
 libmosq_EXPORT int mosquitto_disconnect_v5(struct mosquitto *mosq, int reason_code, const mosquitto_property *properties);
 
@@ -879,8 +882,7 @@ libmosq_EXPORT int mosquitto_publish(struct mosquitto *mosq, int *mid, const cha
  * <mosquitto_property_free_all>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the PUBLISH message. For MQTT v3.1.1 and below, the
- * `properties` argument will be ignored.
+ * will be applied to the PUBLISH message.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -920,6 +922,8 @@ libmosq_EXPORT int mosquitto_publish(struct mosquitto *mosq, int *mid, const cha
  *	                             the broker.
  *	MOSQ_ERR_OVERSIZE_PACKET - if the resulting packet would be larger than
  *	                           supported by the broker.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  */
 libmosq_EXPORT int mosquitto_publish_v5(
 		struct mosquitto *mosq,
@@ -971,8 +975,7 @@ libmosq_EXPORT int mosquitto_subscribe(struct mosquitto *mosq, int *mid, const c
  * <mosquitto_property_free_all>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the PUBLISH message. For MQTT v3.1.1 and below, the
- * `properties` argument will be ignored.
+ * will be applied to the PUBLISH message.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -1000,6 +1003,8 @@ libmosq_EXPORT int mosquitto_subscribe(struct mosquitto *mosq, int *mid, const c
  *	MOSQ_ERR_PROTOCOL - if any property is invalid for use with SUBSCRIBE.
  *	MOSQ_ERR_OVERSIZE_PACKET - if the resulting packet would be larger than
  *	                           supported by the broker.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  */
 libmosq_EXPORT int mosquitto_subscribe_v5(struct mosquitto *mosq, int *mid, const char *sub, int qos, int options, const mosquitto_property *properties);
 
@@ -1076,8 +1081,7 @@ libmosq_EXPORT int mosquitto_unsubscribe(struct mosquitto *mosq, int *mid, const
  * <mosquitto_property_free_all>.
  *
  * If the mosquitto instance `mosq` is using MQTT v5, the `properties` argument
- * will be applied to the PUBLISH message. For MQTT v3.1.1 and below, the
- * `properties` argument will be ignored.
+ * will be applied to the PUBLISH message.
  *
  * Set your client to use MQTT v5 immediately after it is created:
  *
@@ -1103,6 +1107,8 @@ libmosq_EXPORT int mosquitto_unsubscribe(struct mosquitto *mosq, int *mid, const
  *	MOSQ_ERR_PROTOCOL - if any property is invalid for use with UNSUBSCRIBE.
  *	MOSQ_ERR_OVERSIZE_PACKET - if the resulting packet would be larger than
  *	                           supported by the broker.
+ * 	MOSQ_ERR_NOT_SUPPORTED -  if properties is not NULL and the client is not
+ * 	                          using MQTT v5.
  */
 libmosq_EXPORT int mosquitto_unsubscribe_v5(struct mosquitto *mosq, int *mid, const char *sub, const mosquitto_property *properties);
 
@@ -1601,7 +1607,7 @@ libmosq_EXPORT int mosquitto_int_option(struct mosquitto *mosq, enum mosq_opt_t 
  *	          private key for a TLS connection will be obtained. Defaults to
  *	          "pem", a normal private key file.
  *
- *	MOSQ_OPT_TLS_KPASS_SHA1 - Where the TLS Engine requires the use of
+ *	MOSQ_OPT_TLS_ENGINE_KPASS_SHA1 - Where the TLS Engine requires the use of
  *	          a password to be accessed, this option allows a hex encoded
  *	          SHA1 hash of the private key password to be passed to the
  *	          engine directly. Must be set before <mosquitto_connect>.

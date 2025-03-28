@@ -199,12 +199,16 @@ int db__open(struct mosquitto__config *config)
 	/* Initialize the hashtable */
 	db.clientid_index_hash = NULL;
 
-	db.subs = NULL;
+	db.normal_subs = NULL;
+	db.shared_subs = NULL;
 
-	subhier = sub__add_hier_entry(NULL, &db.subs, "", 0);
+	subhier = sub__add_hier_entry(NULL, &db.shared_subs, "", 0);
 	if(!subhier) return MOSQ_ERR_NOMEM;
 
-	subhier = sub__add_hier_entry(NULL, &db.subs, "$SYS", (uint16_t)strlen("$SYS"));
+	subhier = sub__add_hier_entry(NULL, &db.normal_subs, "", 0);
+	if(!subhier) return MOSQ_ERR_NOMEM;
+
+	subhier = sub__add_hier_entry(NULL, &db.normal_subs, "$SYS", (uint16_t)strlen("$SYS"));
 	if(!subhier) return MOSQ_ERR_NOMEM;
 
 	retain__init();
@@ -240,7 +244,8 @@ static void subhier_clean(struct mosquitto__subhier **subhier)
 
 int db__close(void)
 {
-	subhier_clean(&db.subs);
+	subhier_clean(&db.normal_subs);
+	subhier_clean(&db.shared_subs);
 	retain__clean(&db.retains);
 	db__msg_store_clean();
 
@@ -393,19 +398,16 @@ void db__message_dequeue_first(struct mosquitto *context, struct mosquitto_msg_d
 int db__message_delete_outgoing(struct mosquitto *context, uint16_t mid, enum mosquitto_msg_state expect_state, int qos)
 {
 	struct mosquitto_client_msg *tail, *tmp;
-	int msg_index = 0;
 
 	if(!context) return MOSQ_ERR_INVAL;
 
 	DL_FOREACH_SAFE(context->msgs_out.inflight, tail, tmp){
-		msg_index++;
 		if(tail->mid == mid){
 			if(tail->qos != qos){
 				return MOSQ_ERR_PROTOCOL;
 			}else if(qos == 2 && tail->state != expect_state){
 				return MOSQ_ERR_PROTOCOL;
 			}
-			msg_index--;
 			db__message_remove_from_inflight(&context->msgs_out, tail);
 			break;
 		}
@@ -416,7 +418,6 @@ int db__message_delete_outgoing(struct mosquitto *context, uint16_t mid, enum mo
 			break;
 		}
 
-		msg_index++;
 		tail->timestamp = db.now_s;
 		switch(tail->qos){
 			case 0:
@@ -719,14 +720,16 @@ int db__messages_easy_queue(struct mosquitto *context, const char *topic, uint8_
 	}
 
 	stored->payloadlen = payloadlen;
-	stored->payload = mosquitto__malloc(stored->payloadlen+1);
-	if(stored->payload == NULL){
-		db__msg_store_free(stored);
-		return MOSQ_ERR_NOMEM;
+	if(payloadlen > 0){
+		stored->payload = mosquitto__malloc(stored->payloadlen+1);
+		if(stored->payload == NULL){
+			db__msg_store_free(stored);
+			return MOSQ_ERR_NOMEM;
+		}
+		/* Ensure payload is always zero terminated, this is the reason for the extra byte above */
+		((uint8_t *)stored->payload)[stored->payloadlen] = 0;
+		memcpy(stored->payload, payload, stored->payloadlen);
 	}
-	/* Ensure payload is always zero terminated, this is the reason for the extra byte above */
-	((uint8_t *)stored->payload)[stored->payloadlen] = 0;
-	memcpy(stored->payload, payload, stored->payloadlen);
 
 	if(context && context->id){
 		source_id = context->id;
@@ -986,14 +989,12 @@ int db__message_release_incoming(struct mosquitto *context, uint16_t mid)
 	int retain;
 	char *topic;
 	char *source_id;
-	int msg_index = 0;
 	bool deleted = false;
 	int rc;
 
 	if(!context) return MOSQ_ERR_INVAL;
 
 	DL_FOREACH_SAFE(context->msgs_in.inflight, tail, tmp){
-		msg_index++;
 		if(tail->mid == mid){
 			if(tail->store->qos != 2){
 				return MOSQ_ERR_PROTOCOL;
@@ -1026,7 +1027,6 @@ int db__message_release_incoming(struct mosquitto *context, uint16_t mid)
 			break;
 		}
 
-		msg_index++;
 		tail->timestamp = db.now_s;
 
 		if(tail->qos == 2){

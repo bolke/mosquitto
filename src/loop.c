@@ -23,7 +23,6 @@ Contributors:
 #  define _GNU_SOURCE
 #endif
 
-#include <assert.h>
 #ifndef WIN32
 #include <unistd.h>
 #else
@@ -188,6 +187,7 @@ int mosquitto_main_loop(struct mosquitto__listener_sock *listensock, int listens
 #endif
 
 	while(run){
+		retain__expire();
 		queue_plugin_msgs();
 		context__free_disused();
 #ifdef WITH_SYS_TREE
@@ -238,10 +238,13 @@ int mosquitto_main_loop(struct mosquitto__listener_sock *listensock, int listens
 			mosquitto_security_apply();
 			log__close(db.config);
 			log__init(db.config);
+			keepalive__cleanup();
+			keepalive__init();
 			flag_reload = false;
 		}
 		if(flag_tree_print){
-			sub__tree_print(db.subs, 0);
+			sub__tree_print(db.normal_subs, 0);
+			sub__tree_print(db.shared_subs, 0);
 			flag_tree_print = false;
 #ifdef WITH_XTREPORT
 			xtreport();

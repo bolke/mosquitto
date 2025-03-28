@@ -31,7 +31,6 @@ Contributors:
 #  include <ws2tcpip.h>
 #endif
 
-#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -246,6 +245,8 @@ struct mosquitto *net__socket_accept(struct mosquitto__listener_sock *listensock
 		log__printf(NULL, MOSQ_LOG_NOTICE, "New connection from %s:%d on port %d.",
 				new_context->address, new_context->remote_port, new_context->listener->port);
 	}
+
+	keepalive__add(new_context);
 
 	return new_context;
 }
@@ -673,6 +674,9 @@ static int net__bind_interface(struct mosquitto__listener *listener, struct addr
 						memcpy(&((struct sockaddr_in6 *)rp->ai_addr)->sin6_addr,
 								&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr,
 								sizeof(struct in6_addr));
+
+						((struct sockaddr_in6 *)rp->ai_addr)->sin6_scope_id = ((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_scope_id;
+
 						freeifaddrs(ifaddr);
 						return MOSQ_ERR_SUCCESS;
 					}

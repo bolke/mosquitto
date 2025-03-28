@@ -33,11 +33,7 @@ Contributors:
 #endif
 #include <stdlib.h>
 
-#if defined(WITH_THREADING) && !defined(WITH_BROKER)
-#  include <pthread.h>
-#else
-#  include <dummypthread.h>
-#endif
+#include <pthread_compat.h>
 
 #ifdef WITH_SRV
 #  include <ares.h>
@@ -357,6 +353,10 @@ struct mosquitto {
 	struct mosquitto *for_free_next;
 	struct session_expiry_list *expiry_list_item;
 	uint16_t remote_port;
+#  ifndef WITH_OLD_KEEPALIVE
+	struct mosquitto *keepalive_next;
+	struct mosquitto *keepalive_prev;
+#  endif
 #endif
 	uint32_t events;
 };

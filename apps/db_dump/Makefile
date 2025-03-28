@@ -18,7 +18,12 @@ OBJS = \
 	   stubs.o \
 	   time_mosq.o \
 	   topic_tok.o \
+	   util_topic.o \
 	   utf8_mosq.o
+
+ifeq ($(UNAME),Linux)
+    LIBS:=$(LIBS) -lrt
+endif
 
 .PHONY: all clean reallyclean
 
@@ -73,6 +78,9 @@ time_mosq.o : ../../lib/time_mosq.c
 	${CROSS_COMPILE}${CC} $(CFLAGS_FINAL) -c $< -o $@
 
 topic_tok.o : ../../src/topic_tok.c
+	${CROSS_COMPILE}${CC} $(CFLAGS_FINAL) -c $< -o $@
+
+util_topic.o : ../../lib/util_topic.c
 	${CROSS_COMPILE}${CC} $(CFLAGS_FINAL) -c $< -o $@
 
 utf8_mosq.o : ../../lib/utf8_mosq.c
